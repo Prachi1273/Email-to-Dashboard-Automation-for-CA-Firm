@@ -1,0 +1,109 @@
+{
+  "name": "Gmail → CRM Email Processor",
+  "description": "Watches Gmail for new emails, sends them to FastAPI for AI processing, creates CRM records and tasks automatically.",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {
+        "pollTimes": {
+          "item": [{ "mode": "everyMinute" }]
+        },
+        "filters": {
+          "readStatus": "unread",
+          "labels": ["INBOX"]
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": { "id": "1", "name": "Gmail Account" }
+      }
+    },
+    {
+      "id": "2",
+      "name": "Extract Email Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "subject", "value": "={{ $json.subject }}" },
+            { "name": "message", "value": "={{ $json.text || $json.snippet }}" },
+            { "name": "sender_email", "value": "={{ $json.from.value[0].address }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3",
+      "name": "Process Email with AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [680, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/communications/process",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "subject", "value": "={{ $json.subject }}" },
+            { "name": "message", "value": "={{ $json.message }}" },
+            { "name": "sender_email", "value": "={{ $json.sender_email }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Check if High Priority",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.ai_result.priority }}",
+              "operation": "equal",
+              "value2": "high"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Log to Console",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1120, 400],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [[{ "node": "Extract Email Data", "type": "main", "index": 0 }]]
+    },
+    "Extract Email Data": {
+      "main": [[{ "node": "Process Email with AI", "type": "main", "index": 0 }]]
+    },
+    "Process Email with AI": {
+      "main": [[{ "node": "Check if High Priority", "type": "main", "index": 0 }]]
+    },
+    "Check if High Priority": {
+      "main": [
+        [{ "node": "Log to Console", "type": "main", "index": 0 }],
+        [{ "node": "Log to Console", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}
